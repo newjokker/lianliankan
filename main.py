@@ -63,15 +63,35 @@ class ScoreSubmit(BaseModel):
 
 @api_app.post("/score")
 def submit_score(data: ScoreSubmit):
-    """提交分数"""
+    """提交分数 — 同一昵称+同一关卡只保留 time_left 最大（最快）的记录"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     now = datetime.now().isoformat()
 
+    # 查该昵称在该关卡的历史最佳 time_left
     c.execute(
-        "INSERT INTO scores (nickname, level_id, level_name, score, stars, time_left, created_at) VALUES (?,?,?,?,?,?,?)",
-        (data.nickname, data.level_id, data.level_name, data.score, data.stars, data.time_left, now),
+        "SELECT id, time_left FROM scores WHERE nickname = ? AND level_id = ? ORDER BY time_left DESC LIMIT 1",
+        (data.nickname, data.level_id),
     )
+    old = c.fetchone()
+
+    if old is None:
+        # 无历史记录，直接插入
+        c.execute(
+            "INSERT INTO scores (nickname, level_id, level_name, score, stars, time_left, created_at) VALUES (?,?,?,?,?,?,?)",
+            (data.nickname, data.level_id, data.level_name, data.score, data.stars, data.time_left, now),
+        )
+    else:
+        old_id, old_time_left = old
+        if data.time_left > old_time_left:
+            # 新记录更快（剩余时间更多），替换旧记录
+            c.execute("DELETE FROM scores WHERE id = ?", (old_id,))
+            c.execute(
+                "INSERT INTO scores (nickname, level_id, level_name, score, stars, time_left, created_at) VALUES (?,?,?,?,?,?,?)",
+                (data.nickname, data.level_id, data.level_name, data.score, data.stars, data.time_left, now),
+            )
+
+    # 更新 level_best（全服最佳）
     c.execute("SELECT score FROM level_best WHERE level_id = ?", (data.level_id,))
     row = c.fetchone()
     if not row or data.score > row[0]:
@@ -86,26 +106,40 @@ def submit_score(data: ScoreSubmit):
 
 
 @api_app.get("/leaderboard")
-def get_leaderboard(level_id: int = None, limit: int = 20):
-    """获取排行榜"""
+def get_leaderboard(level_id: int = None, nickname: str = None, limit: int = 50):
+    """获取排行榜 — 可选 nickname 参数只返回该玩家记录"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
     if level_id:
-        c.execute(
-            "SELECT nickname, score, stars, time_left, created_at FROM scores WHERE level_id = ? ORDER BY score DESC, time_left DESC LIMIT ?",
-            (level_id, limit),
-        )
+        if nickname:
+            # 只返回该玩家在本关的记录（最多一条，已去重）
+            c.execute(
+                "SELECT nickname, score, stars, time_left, created_at FROM scores WHERE level_id = ? AND nickname = ? LIMIT 1",
+                (level_id, nickname),
+            )
+        else:
+            # 本关全员排行（同玩家只取最佳，已去重）
+            c.execute(
+                "SELECT nickname, score, stars, time_left, created_at FROM scores WHERE level_id = ? ORDER BY time_left DESC, score DESC LIMIT ?",
+                (level_id, limit),
+            )
         rows = c.fetchall()
         result = [
             {"nickname": r[0], "score": r[1], "stars": r[2], "time_left": r[3], "created_at": r[4]}
             for r in rows
         ]
     else:
-        c.execute(
-            "SELECT nickname, SUM(score) as total_score, SUM(stars) as total_stars, MAX(created_at) as last_play FROM scores GROUP BY nickname ORDER BY total_score DESC LIMIT ?",
-            (limit,),
-        )
+        if nickname:
+            c.execute(
+                "SELECT nickname, SUM(score) as total_score, SUM(stars) as total_stars, MAX(created_at) as last_play FROM scores WHERE nickname = ? GROUP BY nickname",
+                (nickname,),
+            )
+        else:
+            c.execute(
+                "SELECT nickname, SUM(score) as total_score, SUM(stars) as total_stars, MAX(created_at) as last_play FROM scores GROUP BY nickname ORDER BY total_score DESC LIMIT ?",
+                (limit,),
+            )
         rows = c.fetchall()
         result = [
             {"nickname": r[0], "total_score": r[1], "total_stars": r[2], "last_play": r[3]}
@@ -160,4 +194,4 @@ async def serve_static(filename: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=55503)

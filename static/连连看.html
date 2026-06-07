@@ -57,6 +57,23 @@
   #screen-start { gap: 12px; }
   .start-subtitle { color: var(--text-dim); font-size: 0.85rem; letter-spacing: 2px; }
 
+  .player-badge {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 14px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 20px; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .player-badge:hover {
+    background: rgba(247,151,30,0.12);
+    border-color: var(--accent);
+  }
+  .player-badge-icon { font-size: 0.9rem; }
+  .player-badge-text { font-size: 0.8rem; color: var(--text-dim); }
+  .player-badge-edit { font-size: 0.7rem; color: var(--text-dim); }
+  .player-badge.has-nick .player-badge-text { color: var(--accent); font-weight: 600; }
+
   .level-map-wrap {
     width: 100%; max-width: 680px; position: relative;
     overflow-x: hidden;
@@ -135,6 +152,23 @@
     flex-shrink: 0;
   }
   .map-path.cleared-path { background: rgba(102,187,106,0.4); }
+
+  /* 关卡节点排行榜按钮 */
+  .node-lb-btn {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    cursor: pointer; font-size: 0.7rem;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s; flex-shrink: 0;
+    backdrop-filter: blur(4px);
+  }
+  .node-lb-btn:hover {
+    background: rgba(247,151,30,0.2);
+    border-color: var(--accent);
+    transform: scale(1.2);
+    box-shadow: 0 0 12px rgba(247,151,30,0.3);
+  }
 
   /* ===== 游戏屏幕 ===== */
   #screen-game { gap: 8px; width: 100%; }
@@ -393,6 +427,13 @@
     100% { opacity: 0; transform: translateX(-50%) scale(0.8) translateY(-20px); }
   }
 
+  @keyframes timePenaltyAnim {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+    15% { opacity: 1; transform: translate(-50%, -50%) scale(1.3); }
+    40% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8) translateY(-60px); }
+  }
+
   @media (max-width: 600px) {
     .modal { padding: 22px 18px; }
     .hud-item { padding: 5px 10px; min-width: 60px; }
@@ -445,6 +486,12 @@
   .lb-rank.top2 { color: #c0c0c0; }
   .lb-rank.top3 { color: #cd7f32; }
   .lb-name { flex: 1; font-size: 0.85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-item.lb-me {
+    background: rgba(247,151,30,0.12);
+    border: 1px solid rgba(247,151,30,0.3);
+    border-radius: 10px;
+  }
+  .lb-item.lb-me .lb-name { color: var(--accent); }
   .lb-score-val { font-size: 0.85rem; font-weight: 700; color: var(--accent2); }
   .lb-stars { font-size: 0.75rem; }
   .lb-loading { text-align: center; color: var(--text-dim); padding: 20px; font-size: 0.85rem; }
@@ -499,6 +546,11 @@
   <div id="screen-start" class="screen active">
     <h1 class="game-title">✨ 连连看</h1>
     <p class="start-subtitle">经典消除益智小游戏</p>
+    <div class="player-badge" id="player-badge" onclick="showNickSettings()" title="点击设置昵称">
+      <span class="player-badge-icon">👤</span>
+      <span class="player-badge-text" id="player-badge-text">未设置昵称</span>
+      <span class="player-badge-edit">✎</span>
+    </div>
 
     <div class="level-map-wrap">
       <div id="level-map"></div>
@@ -1239,14 +1291,14 @@ const Game = (() => {
   function penalizeWrong() {
     // 重置连击
     combo = 0;
-    // 扣除时间
-    const penalty = Math.min(5, Math.max(2, Math.floor(timeLeft * 0.02)));
+    // 扣除时间 — 固定 10 秒
+    const penalty = 10;
     timeLeft = Math.max(0, timeLeft - penalty);
+    showTimePenalty(penalty);
     // 时间条闪烁
     const bar = document.getElementById('time-bar');
     bar.classList.add('penalty');
     setTimeout(() => bar.classList.remove('penalty'), 500);
-    showFloatScore(document.querySelector('.cell.wrong'), `-${penalty}s ⏱️`);
     renderHUD();
     if (timeLeft <= 0) { stopTimer(); onLose(); }
   }
@@ -1271,7 +1323,13 @@ const Game = (() => {
     if (isAnimating) return;
     clearHintHighlight();
     if (selected) { getCellEl(selected[0], selected[1])?.classList.remove('selected'); selected = null; }
+    // 重排消耗 10 秒
+    const penalty = 10;
+    timeLeft = Math.max(0, timeLeft - penalty);
+    showTimePenalty(penalty);
     doShuffleBoard();
+    renderHUD();
+    if (timeLeft <= 0) { stopTimer(); onLose(); }
   }
 
   function doShuffleBoard() {
@@ -1317,10 +1375,19 @@ const Game = (() => {
     launchConfetti();
     document.getElementById('overlay-win').classList.add('show');
 
-    // 2秒后自动弹出昵称输入（也可手动点"提交分数"）
-    setTimeout(() => {
-      if (window.showNickDialog) window.showNickDialog(level.id, level.name, score, starNum, timeLeft);
-    }, 2000);
+    // 自动提交分数或弹出昵称输入
+    const savedNick = localStorage.getItem('llk-nick') || '';
+    if (savedNick) {
+      // 已有昵称，自动提交
+      setTimeout(() => {
+        if (window.submitScoreDirect) window.submitScoreDirect(savedNick, level.id, level.name, score, starNum, timeLeft);
+      }, 1500);
+    } else {
+      // 没有昵称，2秒后弹出昵称输入
+      setTimeout(() => {
+        if (window.showNickDialog) window.showNickDialog(level.id, level.name, score, starNum, timeLeft);
+      }, 2000);
+    }
   }
 
   function onLose() {
@@ -1367,6 +1434,21 @@ const Game = (() => {
     div.textContent = text;
     document.body.appendChild(div);
     setTimeout(() => div.remove(), 1200);
+  }
+
+  function showTimePenalty(seconds) {
+    const div = document.createElement('div');
+    div.className = 'time-penalty';
+    div.textContent = `-${seconds}s ⏱`;
+    div.style.cssText = `
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 2.5rem; font-weight: 900; color: #ff6b6b;
+      text-shadow: 0 0 20px rgba(255,107,107,0.8), 0 0 40px rgba(255,107,107,0.4);
+      pointer-events: none; z-index: 9999;
+      animation: timePenaltyAnim 1.2s ease-out forwards;
+    `;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 1300);
   }
 
   function launchConfetti() {
@@ -1430,6 +1512,8 @@ function renderMenu() {
       html += `<span class="node-icon">${lv.icon}</span>`;
       html += `<span class="node-num">${lv.id}</span>`;
       html += `</div>`;
+      // 排行榜按钮
+      html += `<button class="node-lb-btn" onclick="event.stopPropagation();tryShowLevelLb(${lv.id})" title="查看排行榜">🏆</button>`;
 
       // 节点之间的连线（最后一个不加）
       if (i < lvls.length - 1) {
@@ -1444,6 +1528,82 @@ function renderMenu() {
 }
 
 function startLevel(id) { const level = LEVELS.find(l => l.id === id); if (level) Game.init(level); }
+
+function tryShowLevelLb(levelId) {
+  const progress = JSON.parse(localStorage.getItem('llk-progress') || '{}');
+  const p = progress[levelId];
+  if (!p || (p.stars || 0) <= 0) {
+    // 未通关 — 显示提示
+    const toast = document.createElement('div');
+    toast.className = 'combo-toast';
+    toast.textContent = '🔒 需先通关此关卡';
+    toast.style.background = 'rgba(255,107,107,0.85)';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 1500);
+    return;
+  }
+  // 已通关 — 显示该关排行榜
+  if (window.showLeaderboard) window.showLeaderboard(levelId);
+}
+
+function updatePlayerBadge() {
+  const nick = localStorage.getItem('llk-nick') || '';
+  const badge = document.getElementById('player-badge');
+  const text = document.getElementById('player-badge-text');
+  if (!badge || !text) return;
+  if (nick) {
+    text.textContent = nick;
+    badge.classList.add('has-nick');
+  } else {
+    text.textContent = '未设置昵称';
+    badge.classList.remove('has-nick');
+  }
+}
+
+function showNickSettings() {
+  let overlay = document.getElementById('nick-settings-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'nick-settings-overlay';
+    overlay.className = 'nick-overlay';
+    overlay.innerHTML = `
+      <div class="nick-panel">
+        <button class="lb-close" id="nick-settings-close">✕</button>
+        <div class="nick-title">👤 设置昵称</div>
+        <div class="nick-desc">昵称将在排行榜中显示</div>
+        <input class="nick-input" id="nick-settings-input" maxlength="12" placeholder="请输入昵称（2-12字）" autocomplete="off" />
+        <div class="nick-btn-row">
+          <button class="btn btn-ghost" id="nick-settings-clear">清除昵称</button>
+          <button class="btn btn-primary" id="nick-settings-save">保存</button>
+        </div>
+        <div class="nick-err" id="nick-settings-err"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    document.getElementById('nick-settings-close').onclick = () => overlay.classList.remove('show');
+    document.getElementById('nick-settings-save').onclick = () => {
+      const nick = document.getElementById('nick-settings-input').value.trim();
+      const errEl = document.getElementById('nick-settings-err');
+      if (!nick || nick.length < 2) { errEl.textContent = '请输入至少2个字符的昵称'; return; }
+      if (nick.length > 12) { errEl.textContent = '昵称最多12个字符'; return; }
+      localStorage.setItem('llk-nick', nick);
+      updatePlayerBadge();
+      overlay.classList.remove('show');
+    };
+    document.getElementById('nick-settings-clear').onclick = () => {
+      localStorage.removeItem('llk-nick');
+      document.getElementById('nick-settings-input').value = '';
+      updatePlayerBadge();
+      overlay.classList.remove('show');
+    };
+    document.getElementById('nick-settings-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('nick-settings-save').click();
+    });
+  }
+  document.getElementById('nick-settings-err').textContent = '';
+  document.getElementById('nick-settings-input').value = localStorage.getItem('llk-nick') || '';
+  overlay.classList.add('show');
+  setTimeout(() => document.getElementById('nick-settings-input').focus(), 100);
+}
 
 // ==================== 事件绑定 ====================
 document.addEventListener('DOMContentLoaded', () => {
@@ -1688,31 +1848,77 @@ document.addEventListener('DOMContentLoaded', () => {
     wrap.innerHTML = '<div class="lb-loading">加载中...</div>';
 
     const tab = currentLbTab;
-    const url = tab === 'total' ? API_BASE + '/api/leaderboard' : API_BASE + '/api/leaderboard?level_id=' + tab;
+    const myNick = localStorage.getItem('llk-nick') || '';
+    let url = tab === 'total' ? API_BASE + '/api/leaderboard' : API_BASE + '/api/leaderboard?level_id=' + tab;
+    // 如果有自己的昵称，追加查询参数以便获取自己的记录
+    if (myNick) url += (tab === 'total' ? '?' : '&') + 'nickname=' + encodeURIComponent(myNick);
 
     fetch(url).then(r => r.json()).then(resp => {
       if (!resp.ok) { wrap.innerHTML = '<div class="lb-empty">暂无数据</div>'; return; }
       const data = resp.data || [];
       if (data.length === 0) { wrap.innerHTML = '<div class="lb-empty">暂无数据，快来抢占榜首！</div>'; return; }
 
-      let html = '<ul class="lb-list">';
-      data.forEach((item, idx) => {
-        const rankClass = idx < 3 ? ' top' + (idx+1) : '';
-        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx+1);
-        let detail = '';
-        if (tab === 'total') {
-          detail = `<span class="lb-score-val">${item.total_score}分</span><span class="lb-stars">⭐×${item.total_stars}</span>`;
-        } else {
-          detail = `<span class="lb-score-val">${item.score}分</span><span class="lb-stars">⭐×${item.stars}</span>`;
-        }
-        html += `<li class="lb-item">
-          <span class="lb-rank${rankClass}">${medal}</span>
-          <span class="lb-name">${escapeHtml(item.nickname)}</span>
-          ${detail}
-        </li>`;
+      // 分离：自己的记录 vs 其他玩家
+      let myRecord = null;
+      const others = data.filter(item => {
+        if (myNick && item.nickname === myNick) { myRecord = item; return false; }
+        return true;
       });
-      html += '</ul>';
-      wrap.innerHTML = html;
+
+      // 如果没有通过 API 拿到自己的记录（不在 top 50），单独请求
+      const renderList = (othersList, myRec) => {
+        let html = '<ul class="lb-list">';
+        let myRankInTop = -1;
+
+        othersList.forEach((item, idx) => {
+          const rankClass = idx < 3 ? ' top' + (idx+1) : '';
+          const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx+1);
+          const isMe = myNick && item.nickname === myNick;
+          if (isMe) myRankInTop = idx + 1;
+          const meClass = isMe ? ' lb-me' : '';
+          let detail = '';
+          if (tab === 'total') {
+            detail = `<span class="lb-score-val">${item.total_score}分</span><span class="lb-stars">⭐×${item.total_stars}</span>`;
+          } else {
+            detail = `<span class="lb-score-val">${item.score}分</span><span class="lb-stars">⭐×${item.stars}</span>`;
+          }
+          html += `<li class="lb-item${meClass}">
+            <span class="lb-rank${rankClass}">${medal}</span>
+            <span class="lb-name">${escapeHtml(item.nickname)}</span>
+            ${detail}
+          </li>`;
+        });
+
+        // 如果自己的记录没在 top 50 中显示，追加到末尾
+        if (myRec && myRankInTop < 0) {
+          html += `<li class="lb-item lb-me" style="border-top:2px dashed rgba(247,151,30,0.4);margin-top:8px;padding-top:12px;">
+            <span class="lb-rank">⭐</span>
+            <span class="lb-name">${escapeHtml(myRec.nickname)}</span>`;
+          if (tab === 'total') {
+            html += `<span class="lb-score-val">${myRec.total_score}分</span><span class="lb-stars">⭐×${myRec.total_stars}</span>`;
+          } else {
+            html += `<span class="lb-score-val">${myRec.score}分</span><span class="lb-stars">⭐×${myRec.stars}</span>`;
+          }
+          html += `</li>`;
+        }
+
+        html += '</ul>';
+        wrap.innerHTML = html;
+      };
+
+      // 如果 API 返回的是总榜（无 level_id 且无 nickname 过滤），需要单独查自己的总榜数据
+      if (tab === 'total' && myNick && !myRecord) {
+        // 自己的总榜数据需要单独查询
+        fetch(API_BASE + '/api/leaderboard?nickname=' + encodeURIComponent(myNick))
+          .then(r => r.json())
+          .then(myResp => {
+            const myData = myResp.data || [];
+            renderList(data, myData.length > 0 ? myData[0] : null);
+          })
+          .catch(() => renderList(data, null));
+      } else {
+        renderList(others, myRecord);
+      }
     }).catch(() => {
       wrap.innerHTML = '<div class="lb-empty">连接服务器失败，请确认后端已启动</div>';
     });
@@ -1724,14 +1930,16 @@ document.addEventListener('DOMContentLoaded', () => {
     return div.innerHTML;
   }
 
-  // 在胜利后调用（替换原有关闭逻辑）
+  // 在胜利后调用
   window.showNickDialog = showNickDialog;
   window.showLeaderboard = showLeaderboard;
+  window.submitScoreDirect = submitScore;
 
-  // 排行榜按钮
+  // 排行榜按钮 + 昵称 badge 初始化
   document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('btn-leaderboard');
     if (btn) btn.addEventListener('click', () => showLeaderboard());
+    updatePlayerBadge();
   });
 })();
 </script>
