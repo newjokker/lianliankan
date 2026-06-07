@@ -1773,19 +1773,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       const data = resp.data;
-      let myRecord = null;
-      const others = data.filter(item => {
-        if (myNick && item.nickname === myNick) { myRecord = item; return false; }
-        return true;
-      });
-
       let html = '<ul class="lb-list">';
-      let myRankInTop = -1;
-      others.forEach((item, idx) => {
+      data.forEach((item, idx) => {
         const rankClass = idx < 3 ? ' top' + (idx+1) : '';
         const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx+1);
         const isMe = myNick && item.nickname === myNick;
-        if (isMe) myRankInTop = idx + 1;
         const meClass = isMe ? ' lb-me' : '';
         html += `<li class="lb-item${meClass}">
           <span class="lb-rank${rankClass}">${medal}</span>
@@ -1794,15 +1786,6 @@ document.addEventListener('DOMContentLoaded', () => {
           <span class="lb-stars">⭐×${item.stars}</span>
         </li>`;
       });
-      // 自己的记录没在榜单中，追加到末尾
-      if (myRecord && myRankInTop < 0) {
-        html += `<li class="lb-item lb-me" style="border-top:2px dashed rgba(247,151,30,0.4);margin-top:6px;padding-top:10px;">
-          <span class="lb-rank">⭐</span>
-          <span class="lb-name">${escapeHtml(myRecord.nickname)}</span>
-          <span class="lb-score-val">${myRecord.score}分</span>
-          <span class="lb-stars">⭐×${myRecord.stars}</span>
-        </li>`;
-      }
       html += '</ul>';
       list.innerHTML = html;
     }).catch(() => {
@@ -1844,42 +1827,22 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = resp.data || [];
       if (data.length === 0) { wrap.innerHTML = '<div class="lb-empty">暂无数据，快来抢占榜首！</div>'; return; }
 
-      let myRecord = null;
-      const others = data.filter(item => {
-        if (myNick && item.nickname === myNick) { myRecord = item; return false; }
-        return true;
+      const myNick = localStorage.getItem('llk-nick') || '';
+      let html = '<ul class="lb-list">';
+      data.forEach((item, idx) => {
+        const rankClass = idx < 3 ? ' top' + (idx+1) : '';
+        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx+1);
+        const isMe = myNick && item.nickname === myNick;
+        const meClass = isMe ? ' lb-me' : '';
+        html += `<li class="lb-item${meClass}">
+          <span class="lb-rank${rankClass}">${medal}</span>
+          <span class="lb-name">${escapeHtml(item.nickname)}</span>
+          <span class="lb-score-val">${item.total_score}分</span>
+          <span class="lb-stars">⭐×${item.total_stars}</span>
+        </li>`;
       });
-
-      const renderList = (othersList, myRec) => {
-        let html = '<ul class="lb-list">';
-        let myRankInTop = -1;
-        othersList.forEach((item, idx) => {
-          const rankClass = idx < 3 ? ' top' + (idx+1) : '';
-          const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx+1);
-          const isMe = myNick && item.nickname === myNick;
-          if (isMe) myRankInTop = idx + 1;
-          const meClass = isMe ? ' lb-me' : '';
-          html += `<li class="lb-item${meClass}">
-            <span class="lb-rank${rankClass}">${medal}</span>
-            <span class="lb-name">${escapeHtml(item.nickname)}</span>
-            <span class="lb-score-val">${item.total_score}分</span>
-            <span class="lb-stars">⭐×${item.total_stars}</span>
-          </li>`;
-        });
-        if (myRec && myRankInTop < 0) {
-          html += `<li class="lb-item lb-me" style="border-top:2px dashed rgba(247,151,30,0.4);margin-top:8px;padding-top:12px;">
-            <span class="lb-rank">⭐</span>
-            <span class="lb-name">${escapeHtml(myRec.nickname)}</span>
-            <span class="lb-score-val">${myRec.total_score}分</span>
-            <span class="lb-stars">⭐×${myRec.total_stars}</span>
-          </li>`;
-        }
-        html += '</ul>';
-        wrap.innerHTML = html;
-      };
-
-      // 全服数据已包含自己，直接渲染
-      renderList(others, myRecord);
+      html += '</ul>';
+      wrap.innerHTML = html;
     }).catch(() => {
       wrap.innerHTML = '<div class="lb-empty">连接服务器失败，请确认后端已启动</div>';
     });
