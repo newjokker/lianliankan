@@ -153,23 +153,6 @@
   }
   .map-path.cleared-path { background: rgba(102,187,106,0.4); }
 
-  /* 关卡节点排行榜按钮 */
-  .node-lb-btn {
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.05);
-    cursor: pointer; font-size: 0.7rem;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.2s; flex-shrink: 0;
-    backdrop-filter: blur(4px);
-  }
-  .node-lb-btn:hover {
-    background: rgba(247,151,30,0.2);
-    border-color: var(--accent);
-    transform: scale(1.2);
-    box-shadow: 0 0 12px rgba(247,151,30,0.3);
-  }
-
   /* ===== 游戏屏幕 ===== */
   #screen-game { gap: 8px; width: 100%; }
 
@@ -607,6 +590,11 @@
       <div class="modal-stat"><div class="modal-stat-val" id="win-score">0</div><div class="modal-stat-lbl">得分</div></div>
       <div class="modal-stat"><div class="modal-stat-val" id="win-time">0s</div><div class="modal-stat-lbl">剩余时间</div></div>
       <div class="modal-stat"><div class="modal-stat-val" id="win-stars">⭐</div><div class="modal-stat-lbl">评级</div></div>
+    </div>
+    <!-- 关卡排行榜 -->
+    <div id="level-lb-section" style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;">
+      <div style="font-size:0.85rem;font-weight:700;color:var(--accent);margin-bottom:8px;">🏆 本关排行榜</div>
+      <div id="level-lb-list" style="max-height:200px;overflow-y:auto;"></div>
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" id="btn-next-level">下一关 →</button>
@@ -1512,8 +1500,6 @@ function renderMenu() {
       html += `<span class="node-icon">${lv.icon}</span>`;
       html += `<span class="node-num">${lv.id}</span>`;
       html += `</div>`;
-      // 排行榜按钮
-      html += `<button class="node-lb-btn" onclick="event.stopPropagation();tryShowLevelLb(${lv.id})" title="查看排行榜">🏆</button>`;
 
       // 节点之间的连线（最后一个不加）
       if (i < lvls.length - 1) {
@@ -1528,23 +1514,6 @@ function renderMenu() {
 }
 
 function startLevel(id) { const level = LEVELS.find(l => l.id === id); if (level) Game.init(level); }
-
-function tryShowLevelLb(levelId) {
-  const progress = JSON.parse(localStorage.getItem('llk-progress') || '{}');
-  const p = progress[levelId];
-  if (!p || (p.stars || 0) <= 0) {
-    // 未通关 — 显示提示
-    const toast = document.createElement('div');
-    toast.className = 'combo-toast';
-    toast.textContent = '🔒 需先通关此关卡';
-    toast.style.background = 'rgba(255,107,107,0.85)';
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 1500);
-    return;
-  }
-  // 已通关 — 显示该关排行榜
-  if (window.showLeaderboard) window.showLeaderboard(levelId);
-}
 
 function updatePlayerBadge() {
   const nick = localStorage.getItem('llk-nick') || '';
@@ -1723,8 +1692,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ==================== 服务器排行榜 API ====================
 (function(){
-  const API_BASE = location.origin; // 后端同域部署时自动适配
-  let currentLbTab = 'total'; // 'total' 或关卡数字
+  const API_BASE = location.origin;
 
   // ---- 昵称输入弹窗 ----
   function showNickDialog(levelId, levelName, score, stars, timeLeft) {
@@ -1777,18 +1745,73 @@ document.addEventListener('DOMContentLoaded', () => {
       body: JSON.stringify({ nickname, level_id: levelId, level_name: levelName, score, stars, time_left: timeLeft })
     }).then(r => r.json()).then(resp => {
       if (resp.ok) {
-        showLeaderboard(levelId);
+        // 提交成功后，在通关弹窗中显示本关排行榜
+        loadLevelLeaderboard(levelId);
       } else {
         alert('提交失败，请重试');
       }
     }).catch(() => {
-      // 后端不可用时静默失败，不影响游戏
       console.warn('排行榜提交失败，后端可能未启动');
     });
   }
 
-  // ---- 排行榜弹窗 ----
-  function showLeaderboard(highlightLevelId) {
+  // ---- 在通关弹窗中加载当前关卡排行榜 ----
+  function loadLevelLeaderboard(levelId) {
+    const section = document.getElementById('level-lb-section');
+    const list = document.getElementById('level-lb-list');
+    if (!section || !list) return;
+    section.style.display = 'block';
+    list.innerHTML = '<div class="lb-loading">加载排行榜...</div>';
+
+    const myNick = localStorage.getItem('llk-nick') || '';
+    // 查询全服排行榜（不带 nickname），然后在 JS 中标记自己
+    let url = API_BASE + '/api/leaderboard?level_id=' + levelId;
+
+    fetch(url).then(r => r.json()).then(resp => {
+      if (!resp.ok || !resp.data || resp.data.length === 0) {
+        list.innerHTML = '<div class="lb-empty">暂无数据，快来抢占榜首！</div>';
+        return;
+      }
+      const data = resp.data;
+      let myRecord = null;
+      const others = data.filter(item => {
+        if (myNick && item.nickname === myNick) { myRecord = item; return false; }
+        return true;
+      });
+
+      let html = '<ul class="lb-list">';
+      let myRankInTop = -1;
+      others.forEach((item, idx) => {
+        const rankClass = idx < 3 ? ' top' + (idx+1) : '';
+        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx+1);
+        const isMe = myNick && item.nickname === myNick;
+        if (isMe) myRankInTop = idx + 1;
+        const meClass = isMe ? ' lb-me' : '';
+        html += `<li class="lb-item${meClass}">
+          <span class="lb-rank${rankClass}">${medal}</span>
+          <span class="lb-name">${escapeHtml(item.nickname)}</span>
+          <span class="lb-score-val">${item.score}分</span>
+          <span class="lb-stars">⭐×${item.stars}</span>
+        </li>`;
+      });
+      // 自己的记录没在榜单中，追加到末尾
+      if (myRecord && myRankInTop < 0) {
+        html += `<li class="lb-item lb-me" style="border-top:2px dashed rgba(247,151,30,0.4);margin-top:6px;padding-top:10px;">
+          <span class="lb-rank">⭐</span>
+          <span class="lb-name">${escapeHtml(myRecord.nickname)}</span>
+          <span class="lb-score-val">${myRecord.score}分</span>
+          <span class="lb-stars">⭐×${myRecord.stars}</span>
+        </li>`;
+      }
+      html += '</ul>';
+      list.innerHTML = html;
+    }).catch(() => {
+      list.innerHTML = '<div class="lb-empty">连接服务器失败</div>';
+    });
+  }
+
+  // ---- 主页总榜弹窗（简化版，只有总榜） ----
+  function showTotalLeaderboard() {
     let overlay = document.getElementById('lb-overlay');
     if (!overlay) {
       overlay = document.createElement('div');
@@ -1797,128 +1820,66 @@ document.addEventListener('DOMContentLoaded', () => {
       overlay.innerHTML = `
         <div class="leaderboard-panel">
           <button class="lb-close" id="lb-close">✕</button>
-          <div class="lb-title">🏆 排行榜</div>
-          <div class="lb-tabs" id="lb-tabs">
-            <button class="lb-tab active" data-tab="total">总榜</button>
-          </div>
+          <div class="lb-title">🏆 总排行榜</div>
           <div id="lb-list-wrap"></div>
         </div>`;
       document.body.appendChild(overlay);
       document.getElementById('lb-close').onclick = () => overlay.classList.remove('show');
-      document.getElementById('lb-tabs').addEventListener('click', e => {
-        if (e.target.classList.contains('lb-tab')) {
-          document.querySelectorAll('.lb-tab').forEach(t => t.classList.remove('active'));
-          e.target.classList.add('active');
-          currentLbTab = e.target.dataset.tab;
-          loadLeaderboard();
-        }
-      });
     }
-
-    // 动态生成关卡 tab（只生成有数据的）
-    const tabsEl = document.getElementById('lb-tabs');
-    // 保留"总榜"tab，补充关卡 tabs
-    const existingTabs = tabsEl.querySelectorAll('.lb-tab');
-    const maxLevel = Math.max(...(window.LEVELS || []).map(l => l.id).concat([0]));
-    for (let i = 1; i <= maxLevel; i++) {
-      if (!tabsEl.querySelector(`[data-tab="${i}"]`)) {
-        const btn = document.createElement('button');
-        btn.className = 'lb-tab';
-        btn.dataset.tab = String(i);
-        btn.textContent = '第' + i + '关';
-        tabsEl.appendChild(btn);
-      }
-    }
-
     overlay.classList.add('show');
-    // 如果指定了关卡，切到对应 tab
-    if (highlightLevelId) {
-      const tab = tabsEl.querySelector(`[data-tab="${highlightLevelId}"]`);
-      if (tab) {
-        tabsEl.querySelectorAll('.lb-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        currentLbTab = String(highlightLevelId);
-      }
-    }
-    loadLeaderboard();
+    loadTotalLeaderboard();
   }
 
-  function loadLeaderboard() {
+  function loadTotalLeaderboard() {
     const wrap = document.getElementById('lb-list-wrap');
+    if (!wrap) return;
     wrap.innerHTML = '<div class="lb-loading">加载中...</div>';
 
-    const tab = currentLbTab;
     const myNick = localStorage.getItem('llk-nick') || '';
-    let url = tab === 'total' ? API_BASE + '/api/leaderboard' : API_BASE + '/api/leaderboard?level_id=' + tab;
-    // 如果有自己的昵称，追加查询参数以便获取自己的记录
-    if (myNick) url += (tab === 'total' ? '?' : '&') + 'nickname=' + encodeURIComponent(myNick);
+    // 查询全服总榜（不带 nickname），在 JS 中标记自己
+    let url = API_BASE + '/api/leaderboard';
 
     fetch(url).then(r => r.json()).then(resp => {
       if (!resp.ok) { wrap.innerHTML = '<div class="lb-empty">暂无数据</div>'; return; }
       const data = resp.data || [];
       if (data.length === 0) { wrap.innerHTML = '<div class="lb-empty">暂无数据，快来抢占榜首！</div>'; return; }
 
-      // 分离：自己的记录 vs 其他玩家
       let myRecord = null;
       const others = data.filter(item => {
         if (myNick && item.nickname === myNick) { myRecord = item; return false; }
         return true;
       });
 
-      // 如果没有通过 API 拿到自己的记录（不在 top 50），单独请求
       const renderList = (othersList, myRec) => {
         let html = '<ul class="lb-list">';
         let myRankInTop = -1;
-
         othersList.forEach((item, idx) => {
           const rankClass = idx < 3 ? ' top' + (idx+1) : '';
           const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx+1);
           const isMe = myNick && item.nickname === myNick;
           if (isMe) myRankInTop = idx + 1;
           const meClass = isMe ? ' lb-me' : '';
-          let detail = '';
-          if (tab === 'total') {
-            detail = `<span class="lb-score-val">${item.total_score}分</span><span class="lb-stars">⭐×${item.total_stars}</span>`;
-          } else {
-            detail = `<span class="lb-score-val">${item.score}分</span><span class="lb-stars">⭐×${item.stars}</span>`;
-          }
           html += `<li class="lb-item${meClass}">
             <span class="lb-rank${rankClass}">${medal}</span>
             <span class="lb-name">${escapeHtml(item.nickname)}</span>
-            ${detail}
+            <span class="lb-score-val">${item.total_score}分</span>
+            <span class="lb-stars">⭐×${item.total_stars}</span>
           </li>`;
         });
-
-        // 如果自己的记录没在 top 50 中显示，追加到末尾
         if (myRec && myRankInTop < 0) {
           html += `<li class="lb-item lb-me" style="border-top:2px dashed rgba(247,151,30,0.4);margin-top:8px;padding-top:12px;">
             <span class="lb-rank">⭐</span>
-            <span class="lb-name">${escapeHtml(myRec.nickname)}</span>`;
-          if (tab === 'total') {
-            html += `<span class="lb-score-val">${myRec.total_score}分</span><span class="lb-stars">⭐×${myRec.total_stars}</span>`;
-          } else {
-            html += `<span class="lb-score-val">${myRec.score}分</span><span class="lb-stars">⭐×${myRec.stars}</span>`;
-          }
-          html += `</li>`;
+            <span class="lb-name">${escapeHtml(myRec.nickname)}</span>
+            <span class="lb-score-val">${myRec.total_score}分</span>
+            <span class="lb-stars">⭐×${myRec.total_stars}</span>
+          </li>`;
         }
-
         html += '</ul>';
         wrap.innerHTML = html;
       };
 
-      // 如果 API 返回的是总榜（无 level_id 且无 nickname 过滤），需要单独查自己的总榜数据
-      if (tab === 'total' && myNick && !myRecord) {
-        // 自己的总榜数据需要单独查询
-        fetch(API_BASE + '/api/leaderboard?nickname=' + encodeURIComponent(myNick))
-          .then(r => r.json())
-          .then(myResp => {
-            const myData = myResp.data || [];
-            renderList(data, myData.length > 0 ? myData[0] : null);
-          })
-          .catch(() => renderList(data, null));
-      } else {
-        renderList(others, myRecord);
-      }
+      // 全服数据已包含自己，直接渲染
+      renderList(others, myRecord);
     }).catch(() => {
       wrap.innerHTML = '<div class="lb-empty">连接服务器失败，请确认后端已启动</div>';
     });
@@ -1930,15 +1891,16 @@ document.addEventListener('DOMContentLoaded', () => {
     return div.innerHTML;
   }
 
-  // 在胜利后调用
+  // 对外暴露的接口
   window.showNickDialog = showNickDialog;
-  window.showLeaderboard = showLeaderboard;
+  window.showTotalLeaderboard = showTotalLeaderboard;
   window.submitScoreDirect = submitScore;
+  window.loadLevelLeaderboard = loadLevelLeaderboard;
 
-  // 排行榜按钮 + 昵称 badge 初始化
+  // 主页排行榜按钮初始化
   document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('btn-leaderboard');
-    if (btn) btn.addEventListener('click', () => showLeaderboard());
+    if (btn) btn.addEventListener('click', () => showTotalLeaderboard());
     updatePlayerBadge();
   });
 })();
