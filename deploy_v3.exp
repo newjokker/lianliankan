@@ -1,6 +1,5 @@
 #!/usr/bin/expect -f
 # 版本 v3 部署脚本
-# 自动部署连连看 v3 到阿里云服务器
 set timeout 120
 set host "8.153.160.138"
 set user "root"
@@ -8,11 +7,9 @@ set password "Ldq185522747"
 set port "55503"
 set remote_dir "/root/Code/lianliankan"
 
-puts "================================"
-puts "  连连看 v3 部署脚本"
-puts "================================"
+puts "=== 连连看 v3 部署 ==="
 
-puts "\n>>> 步骤 [1/4] 上传文件到服务器..."
+puts "1/4 上传文件..."
 spawn rsync -avz --delete \
     --exclude ".git" \
     --exclude ".vscode" \
@@ -31,9 +28,9 @@ expect {
     timeout { puts "rsync timeout"; exit 1 }
     eof
 }
-puts "文件上传完成！"
+puts "上传完成"
 
-puts "\n>>> 步骤 [2/4] 连接服务器..."
+puts "2/4 连接服务器..."
 spawn ssh -o StrictHostKeyChecking=no $user@$host
 expect {
     "password:" { send "$password\r" }
@@ -42,18 +39,16 @@ expect {
 }
 expect "# "
 
-puts "\n>>> 步骤 [3/4] 安装依赖..."
+puts "3/4 安装依赖..."
 send "source ~/venv/bin/activate && pip install -r $remote_dir/requirements.txt -q\r"
 expect "# "
 
-puts "\n>>> 步骤 [4/4] 重启服务..."
+puts "4/4 重启服务..."
 send "systemctl daemon-reload && systemctl restart lianliankan && sleep 3 && systemctl status lianliankan --no-pager | head -15\r"
 expect "# "
 
-puts "\n==================================="
-puts "  部署完成！"
-puts "  访问地址: http://8.153.160.138:55503"
-puts "==================================="
+puts "=== 部署完成 ==="
+puts "http://8.153.160.138:55503"
 
 send "exit\r"
 expect eof
