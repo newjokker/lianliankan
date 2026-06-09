@@ -523,6 +523,7 @@
 <canvas id="particles-canvas"></canvas>
 
 <button class="music-btn" id="music-btn" title="背景音乐">🎵</button>
+<button class="music-btn" id="btn-achievements" title="成就" style="top:108px;font-size:1.2rem;">🏅</button>
 <button class="music-btn" id="btn-leaderboard" title="排行榜" style="top:64px;font-size:1.2rem;">🏆</button>
 
 <div id="app">
@@ -574,9 +575,9 @@
       <canvas id="line-canvas"></canvas>
     </div>
     <div class="btn-row">
-      <button class="btn btn-primary" id="btn-hint">💡 提示 <span class="hint-count" id="hint-count">3</span></button>
-      <button class="btn btn-ghost" id="btn-shuffle">🔀 重排</button>
-      <button class="btn btn-ghost" id="btn-back">🏠 返回</button>
+      <button class="btn btn-ghost" id="btn-pause" style="background:var(--card-bg);border:1px solid var(--card-border);">⏸️ 暂停</button>
+      <button class="btn btn-ghost" id="btn-pause" style="background:var(--card-bg);border:1px solid var(--card-border);">⏸️ 暂停</button>
+      <button class="btn btn-primary" id="btn-hint"      <button class="btn btn-ghost" id="btn-back">🏠 返回</button>
     </div>
   </div>
 </div>
@@ -621,8 +622,8 @@
 
 <script>
 /* ======================================================================
-   连连看 - 完整游戏 v2
-   优化：SVG图标素材 + 大尺寸格子 + Canvas连接线动画
+   连连看 - 完整游戏 v3
+   优化：SVG图标素材 + 大尺寸格子 + Canvas连接线动画 + 音效/成就/暂停/统计
    ====================================================================== */
 
 // ==================== SVG 图标素材（内嵌，无需网络）====================
@@ -691,8 +692,8 @@ const TILE_DATA_URLS = [
   'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjI0MCIgZmlsbD0iIzFhMWEyZSIgb3BhY2l0eT0iMC45Ii8+PHBhdGggZmlsbD0iI0ZGRDcwMCIgZD0iTTMzMy43OCAyMC4xODhjLTM5Ljk3IDAtNzkuOTYgMTUuMjEyLTExMC40MDUgNDUuNjU2LTU4LjY2NyA1OC42NjctNjAuNzk2IDE1Mi43Mi02LjQwNiAyMTMuOTdsLTE1Ljc4MiAxNS43NDggMTMuMjUgMTMuMjUgMTUuNzUtMTUuNzhjNjEuMjQ4IDU0LjM5IDE1NS4zIDUyLjI2IDIxMy45NjgtNi40MDcgNjAuODg3LTYwLjg4NiA2MC44ODgtMTU5Ljg5NCAwLTIyMC43OEM0MTMuNzEzIDM1LjQgMzczLjc1MyAyMC4xODcgMzMzLjc4IDIwLjE4N3ptMCAxOC41NjJjMzUuMTUgMCA3MC4yODUgMTMuNDQgOTcuMTU4IDQwLjMxMyA1My43NDUgNTMuNzQ1IDUzLjc0NCAxNDAuNiAwIDE5NC4zNDMtNTEuNTI2IDUxLjUyNi0xMzMuNDYgNTMuNjQzLTE4Ny41IDYuMzc1bC4yMTgtLjIxN2MtMi4zNS0yLjA1LTQuNjY4LTQuMTctNi45MDYtNi40MDctMi4yMDctMi4yMDYtNC4yODgtNC40OTYtNi4zMTMtNi44MTJsLS4yMTguMjJjLTQ3LjI3LTU0LjA0LTQ1LjE1Mi0xMzUuOTc2IDYuMzc0LTE4Ny41MDJDMjYzLjQ2NyA1Mi4xOSAyOTguNjMgMzguNzUgMzMzLjc4IDM4Ljc1em0wIDE4LjgxM2MtMzAuMzEgMC02MC42MyAxMS42LTgzLjgxIDM0Ljc4LTQ2LjM2MiA0Ni4zNjItNDYuMzYyIDEyMS4yMzQgMCAxNjcuNTk0IDEwLjE0IDEwLjE0MiAyMS42MzIgMTguMDc3IDMzLjkwNSAyMy43ODItMjQuOTEtMTkuMDg3LTQwLjk3LTQ5LjEzMy00MC45Ny04Mi45NCAwLTE1LjMyMyAzLjI5Mi0yOS44ODggOS4yMi00My00LjE2NSAyMC40ODUuNDQgNDAuODggMTQuNDcgNTQuOTA3IDI0LjU4MyAyNC41ODUgNjguNzQ0IDIwLjMxOCA5OC42MjQtOS41NjIgMjkuODgtMjkuODggMzQuMTQ2LTc0LjA0IDkuNTYtOTguNjI1YTUyLjM3OSA1Mi4zNzkgMCAwIDAtNy42NTUtNi4zMTNjNDUuMTMgOC42NDggNzkuOTU0IDQ2LjM0NSA4NC4yNSA5Mi44NzYgNC40NC0zNS4wNy02LjgyLTcxLjcyNi0zMy44MTMtOTguNzItMjMuMTgtMjMuMTgtNTMuNDctMzQuNzgtODMuNzgtMzQuNzh6TTE3Ni45MDcgMjk3LjY4OCA0Mi4wOTQgNDMyLjVsMzQuNTYyIDM0LjU2M0wyMTEuNDcgMzMyLjI1bC0zNC41NjQtMzQuNTYzek00MCA0NTYuODEzIDI0IDQ3Mi43OCAzNy4yMiA0ODZsMTUuOTY4LTE2TDQwIDQ1Ni44MTJ6Ii8+PC9zdmc+',
 ];
 /* ======================================================================
-   连连看 - 完整游戏 v2
-   优化：SVG图标素材 + 大尺寸格子 + Canvas连接线动画
+   连连看 - 完整游戏 v3
+   优化：SVG图标素材 + 大尺寸格子 + Canvas连接线动画 + 音效/成就/暂停/统计
    ====================================================================== */
 
 // ==================== 关卡配置（30关） ====================
@@ -1244,10 +1245,12 @@ const Game = (() => {
       [el1, el2].forEach(el => { if (el) { el.innerHTML = ''; el.className = 'cell empty'; } });
 
       matchedPairs++;
+          if (window.LLK_SFX) { window.LLK_SFX.playMatch(); }
       const now = Date.now();
       combo = (now - lastMatchTime < 3000) ? combo + 1 : 1;
       lastMatchTime = now;
       const comboBonus = combo > 1 ? combo * 15 : 0;
+            if (combo >= 3 && window.LLK_SFX) window.LLK_SFX.playCombo();
       const pts = 50 + comboBonus + Math.floor(timeLeft / 10);
       score += pts;
 
@@ -1279,6 +1282,7 @@ const Game = (() => {
   function penalizeWrong() {
     // 重置连击
     combo = 0;
+      if (window.LLK_SFX) window.LLK_SFX.playError();
     // 扣除时间 — 固定 10 秒
     const penalty = 10;
     timeLeft = Math.max(0, timeLeft - penalty);
@@ -1334,13 +1338,18 @@ const Game = (() => {
   // ---- 计时器 ----
   function startTimer() {
     clearInterval(timerInterval);
-    timerInterval = setInterval(() => { timeLeft--; renderHUD(); if (timeLeft <= 0) { clearInterval(timerInterval); onLose(); } }, 1000);
+    timerInterval = setInterval(function() {
+      if (window.PAUSE && window.PAUSE.isPaused) return;
+      timeLeft--; renderHUD(); 
+      if (timeLeft <= 0) { clearInterval(timerInterval); onLose(); }
+    }, 1000);
   }
   function stopTimer() { clearInterval(timerInterval); }
 
   // ---- 胜利 ----
   function onWin() {
     stopTimer();
+      if (window.LLK_SFX) window.LLK_SFX.playWin();
     const ratio = timeLeft / level.timeLimit;
     const stars = ratio > 0.5 ? '⭐⭐⭐' : ratio > 0.25 ? '⭐⭐' : '⭐';
     const progress = JSON.parse(localStorage.getItem('llk-progress') || '{}');
@@ -1349,6 +1358,22 @@ const Game = (() => {
     if (score > prev.score || starNum > prev.stars)
       progress[level.id] = { stars: Math.max(starNum, prev.stars), score: Math.max(score, prev.score) };
     localStorage.setItem('llk-progress', JSON.stringify(progress));
+      // Update game stats
+      if (window.ACH) {
+        var usedHint = level.hintCount - hintLeft;
+        var isSpeedClear = (timeLeft / level.timeLimit) > 0.7;
+        var isThreeStar = starNum >= 3;
+        window.ACH.check({
+          totalGames: 0, totalWins: 1,
+          totalMatches: totalPairs,
+          maxCombo: Math.max(0, combo),
+          clearedLevels: 1,
+          threeStarLevels: isThreeStar ? 1 : 0,
+          speedClears: isSpeedClear ? 1 : 0,
+          noHintClears: (usedHint === 0) ? 1 : 0,
+          currentWinStreak: 1, maxWinStreak: 1
+        });
+      }
 
     // 先显示胜利动画，然后弹出昵称输入
     document.getElementById('win-score').textContent = score;
@@ -1380,7 +1405,9 @@ const Game = (() => {
 
   function onLose() {
     stopTimer();
+      if (window.LLK_SFX) window.LLK_SFX.playLose();
     document.getElementById('lose-score').textContent = score;
+      if (window.ACH) { window.ACH.check({ totalGames: 0, totalLosses: 1, currentWinStreak: 0 }); }
     document.getElementById('lose-pairs').textContent = totalPairs - matchedPairs;
     document.getElementById('btn-retry').onclick = () => { closeOverlays(); init(level); };
     document.getElementById('overlay-lose').classList.add('show');
@@ -1580,6 +1607,16 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-hint').addEventListener('click', () => Game.hint());
   document.getElementById('btn-shuffle').addEventListener('click', () => Game.shuffle());
   document.getElementById('btn-back').addEventListener('click', () => Game.backToMenu());
+  document.getElementById('btn-pause').addEventListener('click', function() {
+    var btn = document.getElementById('btn-pause');
+    if (window.PAUSE && window.PAUSE.isPaused) {
+      window.PAUSE.resume();
+      btn.innerHTML = '\u23f8\ufe0f \u6682\u505c';
+    } else if (window.PAUSE) {
+      window.PAUSE.pause();
+      btn.innerHTML = '\u25b6\ufe0f \u7ee7\u7eed';
+    }
+  });
   document.getElementById('btn-win-menu').addEventListener('click', () => Game.backToMenu());
   document.getElementById('btn-lose-menu').addEventListener('click', () => Game.backToMenu());
 
@@ -1864,8 +1901,303 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('btn-leaderboard');
     if (btn) btn.addEventListener('click', () => showTotalLeaderboard());
+    const achBtn = document.getElementById('btn-achievements');
+    if (achBtn) achBtn.addEventListener('click', () => { if (window.ACH) window.ACH.show(); });
     updatePlayerBadge();
   });
+})();
+
+// ======================================================================
+//  v3 新功能：音效系统（Web Audio API，无需外部文件）
+// ======================================================================
+(function(){
+  var audioCtx = null;
+  var soundEnabled = true;
+
+  function getCtx() {
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+    }
+    return audioCtx;
+  }
+
+  function playMatch() {
+    try {
+      var ctx = getCtx(); if (!ctx) return;
+      var t = ctx.currentTime;
+      [523, 659, 784].forEach(function(f, i) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = f;
+        gain.gain.setValueAtTime(0.10, t + i * 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.06 + 0.2);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(t + i * 0.06); osc.stop(t + i * 0.06 + 0.2);
+      });
+    } catch(e) {}
+  }
+
+  function playError() {
+    try {
+      var ctx = getCtx(); if (!ctx) return;
+      var t = ctx.currentTime;
+      [200, 150].forEach(function(f, i) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.value = f;
+        gain.gain.setValueAtTime(0.07, t + i * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.1 + 0.2);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(t + i * 0.1); osc.stop(t + i * 0.1 + 0.2);
+      });
+    } catch(e) {}
+  }
+
+  function playCombo() {
+    try {
+      var ctx = getCtx(); if (!ctx) return;
+      var t = ctx.currentTime;
+      [523, 659, 784, 1047].forEach(function(f, i) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = f;
+        gain.gain.setValueAtTime(0.08, t + i * 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.05 + 0.3);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(t + i * 0.05); osc.stop(t + i * 0.05 + 0.3);
+      });
+    } catch(e) {}
+  }
+
+  function playWin() {
+    try {
+      var ctx = getCtx(); if (!ctx) return;
+      var t = ctx.currentTime;
+      [523, 659, 784, 1047, 784, 1047, 1319].forEach(function(f, i) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = f;
+        gain.gain.setValueAtTime(0.08, t + i * 0.08);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + 0.4);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(t + i * 0.08); osc.stop(t + i * 0.08 + 0.4);
+      });
+    } catch(e) {}
+  }
+
+  function playLose() {
+    try {
+      var ctx = getCtx(); if (!ctx) return;
+      var t = ctx.currentTime;
+      [400, 350, 300, 250].forEach(function(f, i) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.value = f;
+        gain.gain.setValueAtTime(0.06, t + i * 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.12 + 0.25);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(t + i * 0.12); osc.stop(t + i * 0.12 + 0.25);
+      });
+    } catch(e) {}
+  }
+
+  function toggleSound() {
+    soundEnabled = !soundEnabled;
+    return soundEnabled;
+  }
+
+  window.LLK_SFX = {
+    playMatch: function() { if(soundEnabled) playMatch(); },
+    playError: function() { if(soundEnabled) playError(); },
+    playCombo: function() { if(soundEnabled) playCombo(); },
+    playWin: function() { if(soundEnabled) playWin(); },
+    playLose: function() { if(soundEnabled) playLose(); },
+    toggle: toggleSound,
+    get enabled() { return soundEnabled; }
+  };
+})();
+
+// ======================================================================
+//  v3 新功能：成就系统 + 游戏统计
+// ======================================================================
+(function(){
+  var ACH_DEFS = [
+    { id:'first_blood',    name:'初出茅庐',   desc:'完成第一次消除',    icon:'🎯', check: function(s){ return s.totalMatches >= 1; } },
+    { id:'level5',         name:'小有成就',   desc:'通过第5关',        icon:'🌟', check: function(s){ return s.clearedLevels >= 5; } },
+    { id:'level10',        name:'渐入佳境',   desc:'通过第10关',       icon:'🔥', check: function(s){ return s.clearedLevels >= 10; } },
+    { id:'level20',        name:'大师风范',   desc:'通过第20关',       icon:'👑', check: function(s){ return s.clearedLevels >= 20; } },
+    { id:'level30',        name:'至高永恒',   desc:'通过全部30关',     icon:'✨', check: function(s){ return s.clearedLevels >= 30; } },
+    { id:'combo5',         name:'五连击',     desc:'达到5连击',        icon:'💥', check: function(s){ return s.maxCombo >= 5; } },
+    { id:'combo10',        name:'十连击大师',  desc:'达到10连击',       icon:'⚡', check: function(s){ return s.maxCombo >= 10; } },
+    { id:'speed_demon',    name:'闪电手',     desc:'剩余时间超过70%通关', icon:'⏱', check: function(s){ return s.speedClears >= 1; } },
+    { id:'no_hint',        name:'独立思考',   desc:'不使用提示通关',    icon:'🧠', check: function(s){ return s.noHintClears >= 1; } },
+    { id:'perfect',        name:'满星通关',   desc:'获得任意关卡三星',  icon:'⭐', check: function(s){ return s.threeStarLevels >= 1; } },
+    { id:'hundred_games',  name:'忠实玩家',   desc:'累计游玩100局',    icon:'🎮', check: function(s){ return s.totalGames >= 100; } },
+    { id:'win_streak_3',   name:'三连胜',     desc:'连续胜利3局',      icon:'🏅', check: function(s){ return s.maxWinStreak >= 3; } },
+    { id:'win_streak_5',   name:'五连胜',     desc:'连续胜利5局',      icon:'🏆', check: function(s){ return s.maxWinStreak >= 5; } },
+  ];
+
+  function getStats() {
+    return JSON.parse(localStorage.getItem('llk-stats') || '{}');
+  }
+
+  function getAchievements() {
+    return JSON.parse(localStorage.getItem('llk-achievements') || '{}');
+  }
+
+  function saveAchievements(achs) {
+    localStorage.setItem('llk-achievements', JSON.stringify(achs));
+  }
+
+  function checkAchievements(statsUpdate) {
+    var stats = getStats();
+    for (var k in statsUpdate) { if (statsUpdate.hasOwnProperty(k)) stats[k] = (stats[k] || 0) + statsUpdate[k]; }
+    localStorage.setItem('llk-stats', JSON.stringify(stats));
+
+    var achs = getAchievements();
+    var newlyUnlocked = [];
+
+    ACH_DEFS.forEach(function(def) {
+      if (!achs[def.id] && def.check(stats)) {
+        achs[def.id] = { unlocked: true, time: Date.now() };
+        newlyUnlocked.push(def);
+      }
+    });
+
+    if (newlyUnlocked.length > 0) {
+      saveAchievements(achs);
+      newlyUnlocked.forEach(function(def) {
+        setTimeout(function() { showAchievementToast(def); }, 500);
+      });
+    }
+    return newlyUnlocked;
+  }
+
+  function showAchievementToast(def) {
+    var div = document.createElement('div');
+    var inner = '<div style="display:flex;align-items:center;gap:10px;padding:12px 20px;background:linear-gradient(135deg,rgba(247,151,30,0.3),rgba(255,210,0,0.15));border:1px solid rgba(247,151,30,0.5);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.5);">';
+    inner += '<span style="font-size:1.8rem;">' + def.icon + '</span>';
+    inner += '<div>';
+    inner += '<div style="font-size:0.75rem;color:var(--text-dim);letter-spacing:1px;">🏅 成就解锁</div>';
+    inner += '<div style="font-size:1rem;font-weight:700;color:var(--accent2);">' + def.name + '</div>';
+    inner += '<div style="font-size:0.7rem;color:var(--text-dim);">' + def.desc + '</div>';
+    inner += '</div></div>';
+    div.innerHTML = inner;
+    div.style.cssText = 'position:fixed;bottom:60px;right:20px;z-index:9999;animation:achSlideIn 0.4s ease-out;pointer-events:none;';
+    document.body.appendChild(div);
+    setTimeout(function() {
+      div.style.transition = 'opacity 0.3s';
+      div.style.opacity = '0';
+      setTimeout(function() { div.remove(); }, 300);
+    }, 3500);
+  }
+
+  function showAchievementsPanel() {
+    var overlay = document.getElementById('ach-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'ach-overlay';
+      overlay.className = 'leaderboard-overlay';
+      overlay.innerHTML =
+        '<div class="leaderboard-panel" style="max-width:420px;">' +
+          '<button class="lb-close" id="ach-close">✕</button>' +
+          '<div class="lb-title">🏅 成就</div>' +
+          '<div id="ach-list"></div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      document.getElementById('ach-close').onclick = function() { overlay.classList.remove('show'); };
+    }
+
+    var achs = getAchievements();
+    var stats = getStats();
+    var html = '';
+    ACH_DEFS.forEach(function(def) {
+      var unlocked = achs[def.id];
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;margin-bottom:3px;' +
+        (unlocked ? 'background:rgba(247,151,30,0.12);border:1px solid rgba(247,151,30,0.25);' : 'opacity:0.35;') + '">';
+      html += '<span style="font-size:1.4rem;">' + (unlocked ? def.icon : '🔒') + '</span>';
+      html += '<div style="flex:1;"><div style="font-size:0.82rem;font-weight:600;">' + def.name + '</div>';
+      html += '<div style="font-size:0.65rem;color:var(--text-dim);">' + def.desc + '</div></div>';
+      if (unlocked) {
+        html += '<span style="font-size:0.65rem;color:var(--green);">✅</span>';
+      } else {
+        var prog = getProgressHint(def, stats);
+        html += '<span style="font-size:0.6rem;color:var(--text-dim);">' + prog + '</span>';
+      }
+      html += '</div>';
+    });
+    document.getElementById('ach-list').innerHTML = html || '<div class="lb-empty">暂无成就</div>';
+    overlay.classList.add('show');
+  }
+
+  function getProgressHint(def, stats) {
+    if (def.id === 'level30') return (stats.clearedLevels || 0) + '/30';
+    if (def.id === 'hundred_games') return (stats.totalGames || 0) + '/100';
+    if (def.id === 'combo10') return (stats.maxCombo || 0) + '/10';
+    if (def.id === 'win_streak_5') return (stats.maxWinStreak || 0) + '/5';
+    return '';
+  }
+
+  function init() {
+    if (!localStorage.getItem('llk-stats')) {
+      localStorage.setItem('llk-stats', JSON.stringify({
+        totalGames: 0, totalWins: 0, totalLosses: 0,
+        totalMatches: 0, maxCombo: 0,
+        clearedLevels: 0, threeStarLevels: 0,
+        speedClears: 0, noHintClears: 0,
+        currentWinStreak: 0, maxWinStreak: 0
+      }));
+    }
+    if (!localStorage.getItem('llk-achievements')) {
+      localStorage.setItem('llk-achievements', '{}');
+    }
+  }
+  init();
+
+  window.ACH = {
+    check: checkAchievements,
+    show: showAchievementsPanel,
+    getStats: getStats,
+    getAchievements: getAchievements,
+    getDefs: function() { return ACH_DEFS; }
+  };
+})();
+
+// ======================================================================
+//  v3 新功能：暂停系统
+// ======================================================================
+(function(){
+  var isPaused = false;
+  var pauseCallbacks = { onPause: null, onResume: null };
+
+  function pause() {
+    if (isPaused) return;
+    isPaused = true;
+    if (pauseCallbacks.onPause) pauseCallbacks.onPause();
+  }
+
+  function resume() {
+    if (!isPaused) return;
+    isPaused = false;
+    if (pauseCallbacks.onResume) pauseCallbacks.onResume();
+  }
+
+  function toggle() {
+    isPaused ? resume() : pause();
+  }
+
+  window.PAUSE = {
+    get isPaused() { return isPaused; },
+    setCallbacks: function(cbs) { pauseCallbacks = cbs; },
+    pause: pause,
+    resume: resume,
+    toggle: toggle
+  };
 })();
 </script>
 </body>
