@@ -649,10 +649,19 @@
   </div>
 </div>
 
-  <script src="tile_icons.js"></script>
+  <script src="tile_icons.js" onerror="window.__tileIconsFailed=true;console.warn('tile_icons.js failed to load, using fallback')"></script>
+  <script>
+  // Fallback tile data if external file fails to load
+  var TILE_DATA_URLS = window.TILE_DATA_URLS || [];
+  if (TILE_DATA_URLS.length === 0) {
+    var colors = ["#FF6B6B","#FF8E72","#FFA94D","#FFD43B","#A9E34B","#69DB7C","#38D9A9","#3BC9DB","#4DABF7","#748FFC","#9775FA","#DA77F2","#F783AC","#E64980","#FCC419","#20C997","#845EF7","#339AF0","#51CF66","#FF922B"];
+    var svgTpl = function(c) { return "data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect x=%276%27 y=%276%27 width=%2752%27 height=%2752%27 rx=%2712%27 fill=%27"+c+"%27/%3E%3Ccircle cx=%2732%27 cy=%2732%27 r=%2716%27 fill=%27rgba(255,255,255,0.3)%27/%3E%3C/svg%3E"; };
+    TILE_DATA_URLS = colors.map(svgTpl);
+  }
+  </script>
 <script>
 /* ======================================================================
-   连连看 - 完整游戏 v5 - 外部图标 + 暂停遮罩
+   连连看 - 完整游戏 v6 - 外部图标 + 暂停遮罩 + 统计修复
    ====================================================================== */
 
 // ==================== 关卡配置（30关） ====================
@@ -1328,7 +1337,7 @@ const Game = (() => {
         var newStreak = (prevStats.currentWinStreak || 0) + 1;
         var newMaxStreak = Math.max(newStreak, prevStats.maxWinStreak || 0);
         window.ACH.check({
-          totalGames: 0, totalWins: 1,
+          totalGames: 1, totalWins: 1,
           totalMatches: totalPairs,
           maxCombo: Math.max(0, combo),
           clearedLevels: 1,
@@ -1371,7 +1380,7 @@ const Game = (() => {
     stopTimer();
       if (window.LLK_SFX) window.LLK_SFX.playLose();
     document.getElementById('lose-score').textContent = score;
-      if (window.ACH) { window.ACH.check({ totalGames: 0, totalLosses: 1, currentWinStreak: 0 }); }
+      if (window.ACH) { window.ACH.check({ totalGames: 1, totalLosses: 1, currentWinStreak: 0 }); }
     document.getElementById('lose-pairs').textContent = totalPairs - matchedPairs;
     document.getElementById('btn-retry').onclick = () => { closeOverlays(); init(level); };
     document.getElementById('overlay-lose').classList.add('show');
