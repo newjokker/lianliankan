@@ -1,7 +1,6 @@
 #!/usr/bin/expect -f
 # 版本 v3 部署脚本
 # 自动部署连连看 v3 到阿里云服务器
-
 set timeout 120
 set host "8.153.160.138"
 set user "root"
@@ -13,8 +12,7 @@ puts "================================"
 puts "  连连看 v3 部署脚本"
 puts "================================"
 
-# 1. 上传文件
-puts "\n>>> 步骤 \[1/4\] 上传文件到服务器..."
+puts "\n>>> 步骤 [1/4] 上传文件到服务器..."
 spawn rsync -avz --delete \
     --exclude ".git" \
     --exclude ".vscode" \
@@ -22,6 +20,7 @@ spawn rsync -avz --delete \
     --exclude "__pycache__" \
     --exclude "*.pyc" \
     --exclude "upgrade_*.py" \
+    --exclude "db/leaderboard.db" \
     -e "ssh -o StrictHostKeyChecking=no" \
     /Users/jokkerling/Documents/Code/lianliankan/ \
     $user@$host:$remote_dir/
@@ -32,11 +31,9 @@ expect {
     timeout { puts "rsync timeout"; exit 1 }
     eof
 }
-
 puts "文件上传完成！"
 
-# 2. SSH 到服务器执行后续操作
-puts "\n>>> 步骤 \[2/4\] 连接服务器..."
+puts "\n>>> 步骤 [2/4] 连接服务器..."
 spawn ssh -o StrictHostKeyChecking=no $user@$host
 expect {
     "password:" { send "$password\r" }
@@ -45,11 +42,11 @@ expect {
 }
 expect "# "
 
-puts "\n>>> 步骤 \[3/4\] 安装依赖..."
+puts "\n>>> 步骤 [3/4] 安装依赖..."
 send "source ~/venv/bin/activate && pip install -r $remote_dir/requirements.txt -q\r"
 expect "# "
 
-puts "\n>>> 步骤 \[4/4\] 重启服务..."
+puts "\n>>> 步骤 [4/4] 重启服务..."
 send "systemctl daemon-reload && systemctl restart lianliankan && sleep 3 && systemctl status lianliankan --no-pager | head -15\r"
 expect "# "
 
