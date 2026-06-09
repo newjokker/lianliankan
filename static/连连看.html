@@ -652,7 +652,7 @@
   <script src="tile_icons.js"></script>
 <script>
 /* ======================================================================
-   连连看 - 完整游戏 v4 - 外部图标 + 暂停遮罩
+   连连看 - 完整游戏 v5 - 外部图标 + 暂停遮罩
    ====================================================================== */
 
 // ==================== 关卡配置（30关） ====================
@@ -834,6 +834,7 @@ const Game = (() => {
     timeLeft = lvData.timeLimit; combo = 0; lastMatchTime = 0;
     hintCells = []; isAnimating = false;
     totalPairs = (lvData.rows * lvData.cols) / 2; matchedPairs = 0;
+      window.__gameDims = { cols: lvData.cols, rows: lvData.rows };
 
     showScreen('game');
     renderHUD();
@@ -1322,6 +1323,10 @@ const Game = (() => {
         var usedHint = level.hintCount - hintLeft;
         var isSpeedClear = (timeLeft / level.timeLimit) > 0.7;
         var isThreeStar = starNum >= 3;
+        // Calculate win streak from stats
+        var prevStats = JSON.parse(localStorage.getItem('llk-stats') || '{}');
+        var newStreak = (prevStats.currentWinStreak || 0) + 1;
+        var newMaxStreak = Math.max(newStreak, prevStats.maxWinStreak || 0);
         window.ACH.check({
           totalGames: 0, totalWins: 1,
           totalMatches: totalPairs,
@@ -1330,7 +1335,7 @@ const Game = (() => {
           threeStarLevels: isThreeStar ? 1 : 0,
           speedClears: isSpeedClear ? 1 : 0,
           noHintClears: (usedHint === 0) ? 1 : 0,
-          currentWinStreak: 1, maxWinStreak: 1
+          currentWinStreak: newStreak, maxWinStreak: newMaxStreak
         });
       }
 
@@ -1343,7 +1348,7 @@ const Game = (() => {
     const nextLvl = LEVELS.find(l => l.id === level.id + 1);
     const btnNext = document.getElementById('btn-next-level');
     btnNext.style.display = nextLvl ? '' : 'none';
-    btnNext.onclick = () => { closeOverlays(); init(nextLvl); };
+    btnNext.onclick = function() { closeOverlays(); if (nextLvl) Game.init(nextLvl); else { closeOverlays(); Game.backToMenu(); } };
     launchConfetti();
     document.getElementById('overlay-win').classList.add('show');
 
@@ -1373,7 +1378,7 @@ const Game = (() => {
   }
 
   function closeOverlays() { document.querySelectorAll('.overlay').forEach(o => o.classList.remove('show')); }
-  function backToMenu() { stopTimer(); closeOverlays(); showScreen('start'); renderMenu(); }
+  function backToMenu() { stopTimer(); closeOverlays(); document.getElementById('pause-overlay')?.classList.remove('show'); if (window.PAUSE && window.PAUSE.isPaused) { window.PAUSE.resume(); } showScreen('start'); renderMenu(); }
 
   // ---- 特效 ----
   function spawnParticles(el) {
@@ -1591,7 +1596,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (boardEl.children.length > 0) {
         const wrap = document.getElementById('board-wrap');
         const wrapW = wrap.clientWidth - 20;
-        const cols = level ? level.cols : 8;
+        var cols = window.__gameDims ? window.__gameDims.cols : 8;
         const maxCellW = Math.floor(wrapW / cols) - 3;
         const maxForLevel = cols <= 8 ? 72 : cols <= 12 ? 60 : cols <= 14 ? 52 : 44;
         const size = Math.min(maxForLevel, Math.max(28, maxCellW));
@@ -1682,9 +1687,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // 首次用户交互时自动开始播放
   let autoStarted = false;
   document.addEventListener('click', function autoStart() {
-    if (!autoStarted && !isPlaying) {
+      if (!autoStarted && !isPlaying) {
       startMusic();
       autoStarted = true;
+            document.removeEventListener('click', autoStart);
     }
   }, { once: false });
 
@@ -2021,7 +2027,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function checkAchievements(statsUpdate) {
     var stats = getStats();
-    for (var k in statsUpdate) { if (statsUpdate.hasOwnProperty(k)) stats[k] = (stats[k] || 0) + statsUpdate[k]; }
+      for (var k in statsUpdate) { if (statsUpdate.hasOwnProperty(k)) {
+    if (k === 'currentWinStreak' || k === 'maxWinStreak' || k === 'maxCombo') {
+      stats[k] = Math.max(stats[k] || 0, statsUpdate[k]);
+    } else {
+      stats[k] = (stats[k] || 0) + statsUpdate[k];
+    }
+  }}
     localStorage.setItem('llk-stats', JSON.stringify(stats));
 
     var achs = getAchievements();
