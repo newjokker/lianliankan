@@ -342,7 +342,7 @@
     background: rgba(0,0,0,0.82); backdrop-filter: blur(12px);
     z-index: 50; border-radius: 16px;
     align-items: center; justify-content: center; flex-direction: column;
-    opacity: 0; transition: opacity 0.3s ease;
+    opacity: 0; transition: opacity 0.3s ease, backdrop-filter 0.3s ease;
   }
   .pause-overlay.show {
     display: flex; opacity: 1;
@@ -661,7 +661,7 @@
   </script>
 <script>
 /* ======================================================================
-   连连看 - 完整游戏 v6 - 外部图标 + 暂停遮罩 + 统计修复
+   连连看 - 完整游戏 v7 - 外部图标 + 暂停遮罩 + 统计修复
    ====================================================================== */
 
 // ==================== 关卡配置（30关） ====================
@@ -842,6 +842,7 @@ const Game = (() => {
     selected = null; score = 0; hintLeft = lvData.hintCount;
     timeLeft = lvData.timeLimit; combo = 0; lastMatchTime = 0;
     hintCells = []; isAnimating = false;
+    if (lineAnimFrame) { cancelAnimationFrame(lineAnimFrame); lineAnimFrame = null; }
     totalPairs = (lvData.rows * lvData.cols) / 2; matchedPairs = 0;
       window.__gameDims = { cols: lvData.cols, rows: lvData.rows };
 
@@ -1295,8 +1296,10 @@ const Game = (() => {
 
   function doShuffleBoard() {
     const cells = board.allCells().filter(([r, c]) => !board.isEmpty(r, c));
-    if (cells.length === 0) return;
-    const vals = cells.map(([r, c]) => board.get(r, c));
+      if (lineAnimFrame) { cancelAnimationFrame(lineAnimFrame); lineAnimFrame = null; }
+      var canvas = document.getElementById("line-canvas");
+      if (canvas) { var ctx = canvas.getContext("2d"); if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height); }
+      if (cells.length === 0) return;    const vals = cells.map(([r, c]) => board.get(r, c));
     let tries = 0;
     do { const sv = shuffleArr(vals); cells.forEach(([r, c], i) => board.set(r, c, sv[i])); tries++; } while (!findHintPair(board) && tries < 50);
     selected = null;
@@ -1581,20 +1584,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-shuffle').addEventListener('click', () => Game.shuffle());
   document.getElementById('btn-back').addEventListener('click', () => Game.backToMenu());
   document.getElementById('btn-pause').addEventListener('click', function() {
-    var btn_p = document.getElementById('btn-pause');
-    if (window.PAUSE && window.PAUSE.isPaused) {
-      window.PAUSE.resume();
-      if (btn_p) btn_p.innerHTML = '\u23f8\ufe0f \u6682\u505c';
-    } else if (window.PAUSE) {
-      window.PAUSE.pause();
-      if (btn_p) btn_p.innerHTML = '\u25b6\ufe0f \u7ee7\u7eed';
+    if (window.PAUSE) {
+      if (window.PAUSE.isPaused) window.PAUSE.resume();
+      else window.PAUSE.pause();
     }
   });
 
   document.getElementById('pause-resume-btn').addEventListener('click', function() {
     if (window.PAUSE) window.PAUSE.resume();
-    var btn_pr = document.getElementById('btn-pause');
-    if (btn_pr) btn_pr.innerHTML = '\u23f8\ufe0f \u6682\u505c';
   });
   document.getElementById('btn-win-menu').addEventListener('click', () => Game.backToMenu());
   document.getElementById('btn-lose-menu').addEventListener('click', () => Game.backToMenu());
@@ -2166,6 +2163,8 @@ document.addEventListener('DOMContentLoaded', () => {
     isPaused = true;
     var overlay = document.getElementById('pause-overlay');
     if (overlay) overlay.classList.add('show');
+    var btnP = document.getElementById('btn-pause');
+    if (btnP) btnP.innerHTML = '\u25b6\ufe0f \u7ee7\u7eed';
     if (pauseCallbacks.onPause) pauseCallbacks.onPause();
   }
 
@@ -2174,6 +2173,8 @@ document.addEventListener('DOMContentLoaded', () => {
     isPaused = false;
     var overlay = document.getElementById('pause-overlay');
     if (overlay) overlay.classList.remove('show');
+    var btnP = document.getElementById('btn-pause');
+    if (btnP) btnP.innerHTML = '\u23f8\ufe0f \u6682\u505c';
     if (pauseCallbacks.onResume) pauseCallbacks.onResume();
   }
 
