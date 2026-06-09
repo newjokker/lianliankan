@@ -237,7 +237,7 @@
     cursor: pointer; transition: transform 0.12s, box-shadow 0.12s, background 0.15s, border-color 0.15s;
     background: linear-gradient(145deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04));
     border: 2px solid rgba(255,255,255,0.1);
-    position: relative; user-select: none; line-height: 1;
+    position: relative; user-select: none; touch-action: manipulation; line-height: 1;
     box-shadow: 0 2px 6px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.1);
   }
 
@@ -719,7 +719,7 @@
   </script>
 <script>
 /* ======================================================================
-   连连看 - 完整游戏 v8 - 道具+难度+无尽 外部图标 + 暂停遮罩 + 统计修复
+   连连看 - 完整游戏 v9 - 排行榜+触屏 道具+难度+无尽 外部图标 + 暂停遮罩 + 统计修复
    ====================================================================== */
 
 // ==================== 关卡配置（30关） ====================
@@ -966,8 +966,8 @@ const Game = (() => {
           img.alt = '';
           img.draggable = false;
           cell.appendChild(img);
-          cell.addEventListener('click', () => onCellClick(r, c));
-        }
+            cell.addEventListener('click', function() { onCellClick(r, c); });
+            cell.addEventListener('touchstart', function(e) { e.preventDefault(); onCellClick(r, c); }, {passive:false});
         boardEl.appendChild(cell);
       }
     }
@@ -1906,42 +1906,77 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ---- 在通关弹窗中加载当前关卡排行榜 ----
   function loadLevelLeaderboard(levelId) {
-    const section = document.getElementById('level-lb-section');
-    const list = document.getElementById('level-lb-list');
+    var section = document.getElementById('level-lb-section');
+    var list = document.getElementById('level-lb-list');
     if (!section || !list) return;
     section.style.display = 'block';
     list.innerHTML = '<div class="lb-loading">加载排行榜...</div>';
-
-    const myNick = localStorage.getItem('llk-nick') || '';
-    // 查询全服排行榜（不带 nickname），然后在 JS 中标记自己
-    let url = API_BASE + '/api/leaderboard?level_id=' + levelId;
-
-    fetch(url).then(r => r.json()).then(resp => {
+    var myNick = localStorage.getItem('llk-nick') || '';
+    var url = API_BASE + '/api/leaderboard?level_id=' + levelId + '&limit=200';
+    fetch(url).then(function(r){ return r.json(); }).then(function(resp){
       if (!resp.ok || !resp.data || resp.data.length === 0) {
         list.innerHTML = '<div class="lb-empty">暂无数据，快来抢占榜首！</div>';
         return;
       }
-      const data = resp.data;
-      let html = '<ul class="lb-list">';
-      data.forEach((item, idx) => {
-        const rankClass = idx < 3 ? ' top' + (idx+1) : '';
-        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx+1);
-        const isMe = myNick && item.nickname === myNick;
-        const meClass = isMe ? ' lb-me' : '';
-        html += `<li class="lb-item${meClass}">
-          <span class="lb-rank${rankClass}">${medal}</span>
-          <span class="lb-name">${escapeHtml(item.nickname)}</span>
-          <span class="lb-score-val">${item.score}分</span>
-          <span class="lb-stars">⭐×${item.stars}</span>
-        </li>`;
-      });
-      html += '</ul>';
-      list.innerHTML = html;
-    }).catch(() => {
+      var allData = resp.data;
+      var myIdx = -1;
+      if (myNick) {
+        for (var i = 0; i < allData.length; i++) {
+          if (allData[i].nickname === myNick) { myIdx = i; break; }
+        }
+      }
+      list.innerHTML = buildLeaderboardHTML(allData, myIdx, function(item){ return '<span class="lb-score-val">' + item.score + '分</span><span class="lb-stars">\u2b50\u00d7' + item.stars + '</span>'; });
+    }).catch(function(){
       list.innerHTML = '<div class="lb-empty">连接服务器失败</div>';
     });
   }
 
+  function buildLeaderboardHTML(data, myIdx, scoreFn) {
+    var total = data.length;
+    var showIdx = [];
+    // Always show top 3
+    for (var i = 0; i < Math.min(3, total); i++) showIdx.push(i);
+    if (myIdx >= 0) {
+      if (myIdx < 3) {
+        // User in top 3: show top 10
+        for (var i = 3; i < Math.min(10, total); i++) showIdx.push(i);
+      } else {
+        // User beyond top 3: show user with neighbors
+        var start = Math.max(3, myIdx - 2);
+        var end = Math.min(total, myIdx + 3);
+        // Ensure max 10 total entries (3 top + separator + around user)
+        while (end - start + 3 > 10) end--;
+        if (start > 3) showIdx.push(-1); // separator
+        for (var i = start; i < end; i++) showIdx.push(i);
+        if (end < total) showIdx.push(-2); // separator
+      }
+    } else {
+      // No user match: show top 10
+      for (var i = 3; i < Math.min(10, total); i++) showIdx.push(i);
+    }
+    var html = '<ul class="lb-list">';
+    for (var si = 0; si < showIdx.length; si++) {
+      var idx = showIdx[si];
+      if (idx < 0) {
+        html += '<li class="lb-item" style="justify-content:center;opacity:0.4;font-size:0.7rem;letter-spacing:4px;">' + (idx === -1 ? '\u22ef  \u4ee5\u4e0b  \u22ef' : '\u22ef  \u4ee5\u4e0a  \u22ef') + '</li>';
+        continue;
+      }
+      var item = data[idx];
+      var rankClass = idx < 3 ? ' top' + (idx+1) : '';
+      var medal = idx === 0 ? '\ud83e\udd47' : idx === 1 ? '\ud83e\udd48' : idx === 2 ? '\ud83e\udd49' : (idx+1);
+      var isMe = myNick && item.nickname === myNick;
+      var meClass = isMe ? ' lb-me' : '';
+      html += '<li class="lb-item' + meClass + '"><span class="lb-rank' + rankClass + '">' + medal + '</span><span class="lb-name">' + escapeHtml(item.nickname) + '</span>' + scoreFn(item) + '</li>';
+    }
+    html += '</ul>';
+    if (myIdx >= 0) {
+      var rankNum = myIdx + 1;
+      html += '<div class="lb-my-rank" id="my-rank-line">\ud83d\udc64 \u4f60\u7684\u6392\u540d: \u7b2c <strong style="font-size:1.2rem;color:var(--accent2);">' + rankNum + '</strong> \u540d &nbsp; (' + total + '\u4eba)';
+      if (rankNum > 1) html += ' &nbsp; <span style="font-size:0.7rem;color:var(--text-dim);">\u5dee' + (data[0].score - data[myIdx].score) + '\u5206\u53ef\u5230\u7b2c1</span>';
+      html += '</div>';
+    }
+    return html;
+  }
   // ---- 主页总榜弹窗（简化版，只有总榜） ----
   function showTotalLeaderboard() {
     let overlay = document.getElementById('lb-overlay');
@@ -1963,40 +1998,26 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function loadTotalLeaderboard() {
-    const wrap = document.getElementById('lb-list-wrap');
+    var wrap = document.getElementById('lb-list-wrap');
     if (!wrap) return;
     wrap.innerHTML = '<div class="lb-loading">加载中...</div>';
-
-    const myNick = localStorage.getItem('llk-nick') || '';
-    // 查询全服总榜（不带 nickname），在 JS 中标记自己
-    let url = API_BASE + '/api/leaderboard';
-
-    fetch(url).then(r => r.json()).then(resp => {
+    var myNick = localStorage.getItem('llk-nick') || '';
+    var url = API_BASE + '/api/leaderboard?limit=200';
+    fetch(url).then(function(r){ return r.json(); }).then(function(resp){
       if (!resp.ok) { wrap.innerHTML = '<div class="lb-empty">暂无数据</div>'; return; }
-      const data = resp.data || [];
+      var data = resp.data || [];
       if (data.length === 0) { wrap.innerHTML = '<div class="lb-empty">暂无数据，快来抢占榜首！</div>'; return; }
-
-      const myNick = localStorage.getItem('llk-nick') || '';
-      let html = '<ul class="lb-list">';
-      data.forEach((item, idx) => {
-        const rankClass = idx < 3 ? ' top' + (idx+1) : '';
-        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx+1);
-        const isMe = myNick && item.nickname === myNick;
-        const meClass = isMe ? ' lb-me' : '';
-        html += `<li class="lb-item${meClass}">
-          <span class="lb-rank${rankClass}">${medal}</span>
-          <span class="lb-name">${escapeHtml(item.nickname)}</span>
-          <span class="lb-score-val">${item.total_score}分</span>
-          <span class="lb-stars">⭐×${item.total_stars}</span>
-        </li>`;
-      });
-      html += '</ul>';
-      wrap.innerHTML = html;
-    }).catch(() => {
+      var myIdx = -1;
+      if (myNick) {
+        for (var i = 0; i < data.length; i++) {
+          if (data[i].nickname === myNick) { myIdx = i; break; }
+        }
+      }
+      wrap.innerHTML = buildLeaderboardHTML(data, myIdx, function(item){ return '<span class="lb-score-val">' + item.total_score + '分</span><span class="lb-stars">\u2b50\u00d7' + item.total_stars + '</span>'; });
+    }).catch(function(){
       wrap.innerHTML = '<div class="lb-empty">连接服务器失败，请确认后端已启动</div>';
     });
   }
-
   function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
