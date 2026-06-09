@@ -1911,7 +1911,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!section || !list) return;
     section.style.display = 'block';
     list.innerHTML = '<div class="lb-loading">加载排行榜...</div>';
-    var myNick = localStorage.getItem('llk-nick') || '';
+    var myNick = localStorage.getItem('llk-nick') || ''; __lbMyNick = myNick;
     var url = API_BASE + '/api/leaderboard?level_id=' + levelId + '&limit=200';
     fetch(url).then(function(r){ return r.json(); }).then(function(resp){
       if (!resp.ok || !resp.data || resp.data.length === 0) {
@@ -1964,7 +1964,7 @@ document.addEventListener('DOMContentLoaded', () => {
       var item = data[idx];
       var rankClass = idx < 3 ? ' top' + (idx+1) : '';
       var medal = idx === 0 ? '\ud83e\udd47' : idx === 1 ? '\ud83e\udd48' : idx === 2 ? '\ud83e\udd49' : (idx+1);
-      var isMe = myNick && item.nickname === myNick;
+      var isMe = __lbMyNick && item.nickname === __lbMyNick;
       var meClass = isMe ? ' lb-me' : '';
       html += '<li class="lb-item' + meClass + '"><span class="lb-rank' + rankClass + '">' + medal + '</span><span class="lb-name">' + escapeHtml(item.nickname) + '</span>' + scoreFn(item) + '</li>';
     }
@@ -2001,7 +2001,7 @@ document.addEventListener('DOMContentLoaded', () => {
     var wrap = document.getElementById('lb-list-wrap');
     if (!wrap) return;
     wrap.innerHTML = '<div class="lb-loading">加载中...</div>';
-    var myNick = localStorage.getItem('llk-nick') || '';
+    var myNick = localStorage.getItem('llk-nick') || ''; __lbMyNick = myNick;
     var url = API_BASE + '/api/leaderboard?limit=200';
     fetch(url).then(function(r){ return r.json(); }).then(function(resp){
       if (!resp.ok) { wrap.innerHTML = '<div class="lb-empty">暂无数据</div>'; return; }
@@ -2025,6 +2025,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 对外暴露的接口
+    // Shared leaderboard state
+    var __lbMyNick = '';
   window.showNickDialog = showNickDialog;
   window.showTotalLeaderboard = showTotalLeaderboard;
   window.submitScoreDirect = submitScore;
