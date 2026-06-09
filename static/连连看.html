@@ -966,8 +966,9 @@ const Game = (() => {
           img.alt = '';
           img.draggable = false;
           cell.appendChild(img);
-            cell.addEventListener('click', function() { onCellClick(r, c); });
-            cell.addEventListener('touchstart', function(e) { e.preventDefault(); onCellClick(r, c); }, {passive:false});
+          cell.addEventListener('click', function() { onCellClick(r, c); });
+          cell.addEventListener('touchstart', function(e) { e.preventDefault(); onCellClick(r, c); }, {passive:false});
+        }
         boardEl.appendChild(cell);
       }
     }
