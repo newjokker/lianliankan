@@ -336,6 +336,46 @@
   }
   .music-btn.muted { opacity: 0.5; border-color: rgba(255,255,255,0.1); }
 
+  /* v8 道具栏 */
+  .powerup-bar {
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    width: 100%; max-width: 900px; justify-content: center;
+  }
+  .powerup-btn {
+    padding: 5px 12px; border-radius: 99px; border: 1px solid var(--card-border);
+    background: var(--card-bg); color: var(--text); font-size: 0.7rem;
+    cursor: pointer; font-family: inherit; backdrop-filter: blur(8px);
+    transition: all 0.2s; display: flex; align-items: center; gap: 4px;
+    font-weight: 600;
+  }
+  .powerup-btn:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 0 16px rgba(247,151,30,0.3); }
+  .powerup-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .powerup-btn .pup-icon { font-size: 0.9rem; }
+  .powerup-btn .pup-count {
+    background: rgba(247,151,30,0.25); border-radius: 99px;
+    padding: 0 5px; font-size: 0.6rem; font-weight: 700; color: var(--accent2);
+    min-width: 16px; text-align: center;
+  }
+
+  /* v8 难度选择 */
+  .diff-selector { display: flex; gap: 6px; margin-bottom: 8px; justify-content: center; }
+  .diff-btn {
+    padding: 4px 14px; border-radius: 99px; border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.06); color: var(--text-dim);
+    font-size: 0.75rem; cursor: pointer; font-family: inherit;
+    transition: all 0.2s; font-weight: 600;
+  }
+  .diff-btn:hover { border-color: var(--accent); color: var(--text); }
+  .diff-btn.active { border-color: var(--accent); background: rgba(247,151,30,0.15); color: var(--accent2); box-shadow: 0 0 12px rgba(247,151,30,0.25); }
+
+  /* 无尽模式徽章 */
+  .endless-badge {
+    display: none; padding: 3px 10px; border-radius: 99px;
+    background: linear-gradient(90deg, rgba(247,151,30,0.3), rgba(255,210,0,0.2));
+    border: 1px solid rgba(247,151,30,0.4); font-size: 0.65rem;
+    color: var(--accent2); font-weight: 700; letter-spacing: 1px;
+  }
+  .endless-badge.show { display: inline-block; }
   /* v4 暂停遮罩 */
   .pause-overlay {
     display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
@@ -358,7 +398,7 @@
   }
   .pause-overlay .pause-btn:hover { transform: scale(1.05); box-shadow: 0 0 24px rgba(79,195,247,0.5); }
 
-  /* ===== 覆盖层 ===== */}]}
+  /* ===== 覆盖层 ===== */
   .overlay {
     display: none; position: fixed; inset: 0;
     background: rgba(0,0,0,0.75); z-index: 100;
@@ -552,6 +592,11 @@
   <div id="screen-start" class="screen active">
     <h1 class="game-title">✨ 连连看</h1>
     <p class="start-subtitle">经典消除益智小游戏</p>
+    <div class="diff-selector">
+      <button class="diff-btn" data-diff="easy" onclick="setDifficulty('easy')">🌱 简单</button>
+      <button class="diff-btn active" data-diff="normal" onclick="setDifficulty('normal')">⚡ 普通</button>
+      <button class="diff-btn" data-diff="hard" onclick="setDifficulty('hard')">🔥 困难</button>
+    </div>
     <div class="player-badge" id="player-badge" onclick="showNickSettings()" title="点击设置昵称">
       <span class="player-badge-icon">👤</span>
       <span class="player-badge-text" id="player-badge-text">未设置昵称</span>
@@ -588,6 +633,19 @@
         <div class="time-bar-shine"></div>
         <span class="time-bar-text" id="time-bar-text">03:00</span>
       </div>
+    </div>
+  <div class="powerup-bar" id="powerup-bar">
+      <span style="font-size:0.65rem;color:var(--text-dim);letter-spacing:1px;">道具</span>
+      <button class="powerup-btn" id="btn-freeze" title="冻结计时10秒">
+        <span class="pup-icon">❄️</span>冻结 <span class="pup-count" id="freeze-count">0</span>
+      </button>
+      <button class="powerup-btn" id="btn-free-shuffle" title="免费洗牌（不扣时间）">
+        <span class="pup-icon">🔄</span>洗牌 <span class="pup-count" id="freeshuffle-count">0</span>
+      </button>
+      <button class="powerup-btn" id="btn-timeboost" title="增加15秒时间">
+        <span class="pup-icon">⏱️</span>加时 <span class="pup-count" id="timeboost-count">0</span>
+      </button>
+      <span class="endless-badge" id="endless-badge">♾️ 无尽模式</span>
     </div>
     <div class="progress-wrap">
       <div class="progress-bar" id="progress-bar" style="width:0%"></div>
@@ -661,7 +719,7 @@
   </script>
 <script>
 /* ======================================================================
-   连连看 - 完整游戏 v7 - 外部图标 + 暂停遮罩 + 统计修复
+   连连看 - 完整游戏 v8 - 道具+难度+无尽 外部图标 + 暂停遮罩 + 统计修复
    ====================================================================== */
 
 // ==================== 关卡配置（30关） ====================
@@ -835,6 +893,10 @@ const Game = (() => {
 
   function init(lvData) {
     level = lvData;
+      // Apply difficulty modifier
+      var savedDiff = localStorage.getItem('llk-difficulty') || 'normal';
+      if (savedDiff === 'easy') { lvData = Object.assign({}, lvData, { timeLimit: Math.round(lvData.timeLimit * 1.5) }); }
+      else if (savedDiff === 'hard') { lvData = Object.assign({}, lvData, { timeLimit: Math.round(lvData.timeLimit * 0.75), hintCount: Math.max(1, lvData.hintCount - 1) }); }
     board = generateBoard(lvData);
     let attempts = 0;
     while (!findHintPair(board) && attempts++ < 20) board = generateBoard(lvData);
@@ -844,7 +906,10 @@ const Game = (() => {
     hintCells = []; isAnimating = false;
     if (lineAnimFrame) { cancelAnimationFrame(lineAnimFrame); lineAnimFrame = null; }
     totalPairs = (lvData.rows * lvData.cols) / 2; matchedPairs = 0;
+      initPowerups(lvData);
       window.__gameDims = { cols: lvData.cols, rows: lvData.rows };
+        var endlessBadge = document.getElementById('endless-badge');
+        if (endlessBadge) endlessBadge.classList.toggle('show', lvData.id > 30);
 
     showScreen('game');
     renderHUD();
@@ -1359,7 +1424,8 @@ const Game = (() => {
 
     const nextLvl = LEVELS.find(l => l.id === level.id + 1);
     const btnNext = document.getElementById('btn-next-level');
-    btnNext.style.display = nextLvl ? '' : 'none';
+    btnNext.style.display = '';
+    // Always show - endless mode uses same flow
     btnNext.onclick = function() { closeOverlays(); if (nextLvl) Game.init(nextLvl); else { closeOverlays(); Game.backToMenu(); } };
     launchConfetti();
     document.getElementById('overlay-win').classList.add('show');
@@ -1455,7 +1521,66 @@ const Game = (() => {
     }
   }
 
-  return { init, hint, shuffle: doShuffle, backToMenu };
+    // ---- v8 道具系统 ----
+  var powerups = { freeze: 0, freeShuffle: 0, timeBoost: 0 };
+
+  function initPowerups(lvData) {
+    // 每关赠送基础道具
+    powerups.freeze = 1;
+    powerups.freeShuffle = 1;
+    powerups.timeBoost = 1;
+    // 困难模式额外奖励一个加时
+    var savedDiff = localStorage.getItem('llk-difficulty') || 'normal';
+    if (savedDiff === 'hard') powerups.timeBoost += 1;
+    renderPowerups();
+  }
+
+  function renderPowerups() {
+    document.getElementById('freeze-count').textContent = powerups.freeze;
+    document.getElementById('freeshuffle-count').textContent = powerups.freeShuffle;
+    document.getElementById('timeboost-count').textContent = powerups.timeBoost;
+    document.getElementById('btn-freeze').disabled = powerups.freeze <= 0;
+    document.getElementById('btn-free-shuffle').disabled = powerups.freeShuffle <= 0;
+    document.getElementById('btn-timeboost').disabled = powerups.timeBoost <= 0;
+  }
+
+  function useFreeze() {
+    if (powerups.freeze <= 0 || isAnimating) return;
+    powerups.freeze--;
+    renderPowerups();
+    // Pause timer for 10 seconds (don't count down)
+    var freezeExtra = 10;
+    timeLeft += freezeExtra;
+    showFloatScore(document.querySelector('.cell:not(.empty)'), '❄️ 冻结 +' + freezeExtra + 's');
+    if (window.LLK_SFX) window.LLK_SFX.playCombo();
+    renderHUD();
+  }
+
+  function useFreeShuffle() {
+    if (powerups.freeShuffle <= 0 || isAnimating) return;
+    powerups.freeShuffle--;
+    renderPowerups();
+    clearHintHighlight();
+    if (selected) { getCellEl(selected[0], selected[1])?.classList.remove('selected'); selected = null; }
+    doShuffleBoard();
+    showFloatScore(document.querySelector('.cell:not(.empty)'), '🔄 免费洗牌');
+    renderHUD();
+  }
+
+  function useTimeBoost() {
+    if (powerups.timeBoost <= 0 || isAnimating) return;
+    powerups.timeBoost--;
+    renderPowerups();
+    var boost = 15;
+    timeLeft += boost;
+    var bar = document.getElementById('time-bar');
+    bar.classList.add('bonus');
+    setTimeout(function() { bar.classList.remove('bonus'); }, 600);
+    showFloatScore(document.querySelector('.cell:not(.empty)'), '⏱️ +' + boost + 's');
+    if (window.LLK_SFX) window.LLK_SFX.playCombo();
+    renderHUD();
+  }
+  return { init, hint, shuffle: doShuffle, backToMenu, freeze: useFreeze, freeShuffle: useFreeShuffle, timeBoost: useTimeBoost };
 })();
 
 // ==================== 页面控制 ====================
@@ -1514,6 +1639,13 @@ function renderMenu() {
   });
 
   map.innerHTML = html;
+}
+
+function setDifficulty(diff) {
+  localStorage.setItem('llk-difficulty', diff);
+  document.querySelectorAll('.diff-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.diff === diff);
+  });
 }
 
 function startLevel(id) { const level = LEVELS.find(l => l.id === id); if (level) Game.init(level); }
@@ -1581,6 +1713,9 @@ function showNickSettings() {
 document.addEventListener('DOMContentLoaded', () => {
   renderMenu(); showScreen('start');
   document.getElementById('btn-hint').addEventListener('click', () => Game.hint());
+    document.getElementById('btn-freeze').addEventListener('click', function() { Game.freeze(); });
+    document.getElementById('btn-free-shuffle').addEventListener('click', function() { Game.freeShuffle(); });
+    document.getElementById('btn-timeboost').addEventListener('click', function() { Game.timeBoost(); });
   document.getElementById('btn-shuffle').addEventListener('click', () => Game.shuffle());
   document.getElementById('btn-back').addEventListener('click', () => Game.backToMenu());
   document.getElementById('btn-pause').addEventListener('click', function() {
